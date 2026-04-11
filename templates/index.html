@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YouTube Downloader</title>
+</head>
+<body>
+
+<h2>YouTube Downloader</h2>
+
+<form id="downloadForm">
+    <textarea name="urls" rows="8" cols="60" placeholder="One URL per line"></textarea><br><br>
+
+    <input type="radio" name="type" value="video" checked> Video
+    <input type="radio" name="type" value="audio"> Audio<br><br>
+
+    <button type="submit">Start Download</button>
+</form>
+
+<h3>Progress</h3>
+<ul id="progressList"></ul>
+
+<h3>Files</h3>
+<ul id="fileList"></ul>
+
+<script>
+document.getElementById("downloadForm").onsubmit = function(e){
+    e.preventDefault();
+
+    const formData = new FormData(this);
+
+    fetch("/start", {
+        method: "POST",
+        body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+        const task_id = data.task_id;
+        const count = data.count;
+
+        const progressList = document.getElementById("progressList");
+        progressList.innerHTML = "";
+
+        // Create progress bars
+        for(let i=0; i<count; i++){
+            let file_id = task_id + "_" + i;
+
+            let li = document.createElement("li");
+            li.innerHTML = `
+                File ${i+1}: 
+                <progress id="bar_${file_id}" value="0" max="100"></progress>
+                <span id="text_${file_id}">0%</span>
+            `;
+            progressList.appendChild(li);
+        }
+
+        const interval = setInterval(() => {
+            fetch("/progress/" + task_id)
+                .then(res => res.json())
+                .then(data => {
+
+                    let allDone = true;
+
+                    for (let file_id in data.progress){
+                        let bar = document.getElementById("bar_" + file_id);
+                        let text = document.getElementById("text_" + file_id);
+
+                        if(bar){
+                            bar.value = data.progress[file_id];
+                            text.innerText = Math.round(data.progress[file_id]) + "%";
+
+                            if(data.progress[file_id] < 100){
+                                allDone = false;
+                            }
+                        }
+                    }
+
+                    // ✅ When ALL downloads done AND files ready
+                    if(allDone && data.files.length > 0){
+
+                        clearInterval(interval);
+
+                        const list = document.getElementById("fileList");
+                        list.innerHTML = "";
+
+                        data.files.forEach(file => {
+                            let li = document.createElement("li");
+
+                            if(file.file.endsWith(".mp3")){
+                                li.innerHTML = `
+                                    ${file.file}<br>
+                                    <audio controls src="/download/${file.file}"></audio><br>
+                                    <a href="/download/${file.file}">Download</a>
+                                `;
+                            } else if(file.file.endsWith(".mp4")){
+                                li.innerHTML = `
+                                    ${file.file}<br>
+                                    <video width="300" controls src="/download/${file.file}"></video><br>
+                                    <a href="/download/${file.file}">Download</a>
+                                `;
+                            } else {
+                                li.innerText = file.file;
+                            }
+
+                            list.appendChild(li);
+                        });
+                    }
+                });
+        }, 500);
+    });
+}
+</script>
+
+</body>
+</html>
